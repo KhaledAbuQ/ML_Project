@@ -281,7 +281,7 @@ def test(model_engine, testset, local_device, target_dtype, ):
     )
 
     total_loss = 0
-
+    criterion = nn.MSELoss()
     # Start testing.
     model_engine.eval()
     with torch.no_grad():
@@ -290,7 +290,9 @@ def test(model_engine, testset, local_device, target_dtype, ):
             if target_dtype != None:
                 images = images.to(target_dtype)
             outputs = model_engine(images.to(local_device))
-            loss = model_engine.criterion(outputs, labels)
+            labels = labels.to(target_dtype)
+            labels = labels.to(local_device)
+            loss = criterion(outputs, labels)
             total_loss += loss
 
 
@@ -303,7 +305,7 @@ def main(args):
     # Initialize DeepSpeed distributed backend.
     os.environ["NCCL_DEBUG"]="INFO"
     os.environ["NCCL_SOCKET_IFNAME"]="eno1"
-    deepspeed.init_distributed(init_method='tcp://192.168.1.11:12355', rank=0, world_size=1)
+    deepspeed.init_distributed(init_method='tcp://192.168.1.11:12355', rank=0, world_size=2)
     _local_rank = 0 #int(os.environ.get("LOCAL_RANK"))
     get_accelerator().set_device(_local_rank)
 
@@ -332,7 +334,7 @@ def main(args):
     if torch.distributed.get_rank() == 0:
     # Cifar data is downloaded, indicate other ranks can proceed.
         print("yo")
-        torch.distributed.barrier()
+        torch.distributed.barrier(device_ids=[0])
         print("yoo")
 
     ########################################################################
