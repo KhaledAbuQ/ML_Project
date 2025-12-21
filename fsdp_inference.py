@@ -10,7 +10,6 @@ import torch.optim as optim
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
-from nnsight import NNsight
 
 def ddp_setup():
     torch.cuda.set_device(0)
@@ -18,7 +17,7 @@ def ddp_setup():
     os.environ["NCCL_SOCKET_IFNAME"]="eno1"
     os.environ["GLOO_SOCKET_IFNAME"]="eno1"
     os.environ["NCCL_DEBUG"]="INFO"
-    init_process_group(backend="nccl", init_method='tcp://192.168.1.11:12355', rank=0, world_size=1)
+    init_process_group(backend="nccl", init_method='tcp://192.168.1.10:12355', rank=1, world_size=2)
 
     
 path = 'face2comics_v1.0.0_by_Sxela/face2comics_v1.0.0_by_Sxela/'
@@ -96,7 +95,6 @@ class Trainer:
             self._load_snapshot(snapshot_path)
 
         self.model = DDP(self.model, device_ids=[self.local_rank])
-        self.nns = NNsight(self.model)
         self.criterion = nn.MSELoss()
 
     def _load_snapshot(self, snapshot_path):
@@ -135,12 +133,6 @@ class Trainer:
             self._run_epoch(epoch)
             if self.local_rank == 0 and epoch % self.save_every == 0:
                 self._save_snapshot(epoch)
-
-    def _inference(self, input):
-        input = input.to(self.local_rank)
-        with self.nns.trace(input) as tracer:
-            out = self.nns.module.encoder[2].output.save()
-        print(out)
     
 
 face_train = face[:8000]
@@ -191,9 +183,6 @@ def main(save_every: int, total_epochs: int, batch_size: int, snapshot_path: str
     train_data = prepare_dataloader(dataset, batch_size)
     trainer = Trainer(model, train_data, optimizer, save_every, snapshot_path)
     trainer.train(total_epochs)
-    t = next(iter(train_data))[0][0]
-    inp = t.view(1,t.shape[0],t.shape[1],t.shape[2])
-    trainer._inference(inp)
     destroy_process_group()
 
 if __name__ == "__main__":
